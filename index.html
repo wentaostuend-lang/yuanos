@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>QQ Lite OS - Ultimate</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        body { overscroll-behavior-y: none; background: #f0f2f5; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        .chat-bubble-me { border-radius: 18px 2px 18px 18px; background: #0099ff; color: white; }
+        .chat-bubble-ai { border-radius: 2px 18px 18px 18px; background: white; color: #333; }
+        .ios-tab { transition: all 0.2s ease; }
+        .ios-tab:active { transform: scale(0.9); opacity: 0.7; }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen">
+    <div id="root" class="w-full h-[100dvh] max-w-md bg-white relative shadow-2xl overflow-hidden flex flex-col"></div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "react": "https://esm.sh/react@18.2.0",
+            "react-dom": "https://esm.sh/react-dom@18.2.0",
+            "lucide-react": "https://esm.sh/lucide-react@0.263.1"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import React, { useState, useEffect, useRef } from 'react';
+        import ReactDOM from 'react-dom';
+        import { 
+            MessageCircle, User, Settings, Send, Image as ImageIcon, 
+            ChevronLeft, Search, Plus, Download, Upload, Trash2, ShieldCheck
+        } from 'lucide-react';
+
+        // --- 工具函数：图片压缩 ---
+        const compressImage = (file) => {
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.src = e.target.result;
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        const scale = Math.min(1, 800 / img.width);
+                        canvas.width = img.width * scale;
+                        canvas.height = img.height * scale;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                        resolve(canvas.toDataURL('image/jpeg', 0.7));
+                    };
+                };
+            });
+        };
+
+        // --- 设置页面组件 (包含备份功能) ---
+        const SettingsView = ({ sessions, allMessages, onBack }) => {
+            const fileRef = useRef();
+
+            const handleExport = () => {
+                const data = { version: '1.1', timestamp: Date.now(), sessions, messages: allMessages };
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `QQ_Lite_Backup_${new Date().toLocaleDateString()}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+            };
+
+            const handleImport = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    try {
+                        const json = JSON.parse(event.target.result);
+                        if (confirm('导入备份将覆盖现有聊天，确定吗？')) {
+                            localStorage.setItem('QQ_LITE_SESSIONS', JSON.stringify(json.sessions));
+                            localStorage.setItem('QQ_LITE_MSGS', JSON.stringify(json.messages));
+                            window.location.reload();
+                        }
+                    } catch { alert('无效的备份文件'); }
+                };
+                reader.readAsText(file);
+            };
+
+            const clearData = () => {
+                if (confirm('警告：此操作将永久删除所有本地数据！')) {
+                    localStorage.clear();
+                    window.location.reload();
+                }
+            };
+
+            return (
+                <div className="absolute inset-0 bg-gray-50 z-50 flex flex-col animate-in slide-in-from-right duration-300">
+                    <div className="h-14 bg-white border-b flex items-center px-4 shrink-0">
+                        <button onClick={onBack} className="p-1"><ChevronLeft /></button>
+                        <span className="ml-2 font-bold">系统设置</span>
+                    </div>
+                    <div className="p-4 space-y-4 overflow-y-auto">
+                        <div className="bg-white rounded-2xl overflow-hidden border border-gray-100 shadow-sm">
+                            <button onClick={handleExport} className="w-full flex items-center p-4 active:bg-gray-50 border-b">
+                                <Download className="text-blue-500 mr-3" size={20}/>
+                                <div className="text-left"><p className="font-medium text-sm">导出备份</p><p className="text-xs text-gray-400">下载聊天记录到本地</p></div>
+                            </button>
+                            <button onClick={() => fileRef.current.click()} className="w-full flex items-center p-4 active:bg-gray-50 border-b">
+                                <Upload className="text-green-500 mr-3" size={20}/>
+                                <div className="text-left"><p className="font-medium text-sm">导入备份</p><p className="text-xs text-gray-400">从 JSON 文件恢复数据</p></div>
+                                <input type="file" ref={fileRef} onChange={handleImport} className="hidden" accept=".json" />
+                            </button>
+                            <button onClick={clearData} className="w-full flex items-center p-4 active:bg-gray-50 text-red-500">
+                                <Trash2 className="mr-3" size={20}/>
+                                <p className="font-medium text-sm">清空所有数据</p>
+                            </button>
+                        </div>
+                        <div className="p-4 text-center">
+                            <ShieldCheck className="mx-auto text-gray-300 mb-2" size={32}/>
+                            <p className="text-[10px] text-gray-400 uppercase tracking-widest">QQ Lite OS v1.1.0 • Secure Storage</p>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- 聊天详情组件 ---
+        const ChatDetail = ({ contact, messages, onSendMessage, onBack }) => {
+            const [text, setText] = useState('');
+            const fileRef = useRef();
+            const scrollRef = useRef();
+
+            useEffect(() => { scrollRef.current?.scrollTo(0, scrollRef.current.scrollHeight); }, [messages]);
+
+            return (
+                <div className="absolute inset-0 bg-[#f2f2f7] z-40 flex flex-col animate-in slide-in-from-right">
+                    <div className="h-14 bg-white/80 backdrop-blur-md border-b flex items-center px-4 shrink-0">
+                        <button onClick={onBack}><ChevronLeft /></button>
+                        <div className="ml-3"><p className="font-bold text-sm">{contact.name}</p><p className="text-[10px] text-green-500">正在运行</p></div>
+                    </div>
+                    <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar">
+                        {messages.map((m, i) => (
+                            <div key={i} className={`flex ${m.isSelf ? 'justify-end' : 'justify-start'}`}>
+                                <div className={`max-w-[75%] p-3 shadow-sm text-sm ${m.isSelf ? 'chat-bubble-me' : 'chat-bubble-ai'}`}>
+                                    {m.image && <img src={m.image} className="rounded-lg mb-2 w-full object-cover" />}
+                                    {m.text}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="p-3 bg-white border-t flex items-center space-x-2 pb-safe">
+                        <input type="file" ref={fileRef} className="hidden" accept="image/*" onChange={async(e) => {
+                            const b64 = await compressImage(e.target.files[0]);
+                            onSendMessage({ text: '[图片]', image: b64, isSelf: true });
+                        }} />
+                        <button onClick={() => fileRef.current.click()}><ImageIcon className="text-gray-400" /></button>
+                        <input className="flex-1 bg-gray-100 rounded-full px-4 py-2 text-sm outline-none" placeholder="输入消息..." value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>e.key==='Enter' && (onSendMessage({text, isSelf:true}), setText(''))} />
+                        <button onClick={() => {onSendMessage({text, isSelf:true}); setText('');}} className="bg-blue-500 p-2 rounded-full text-white"><Send size={16}/></button>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- 主程序 ---
+        const App = () => {
+            const [view, setView] = useState('list'); // list, settings
+            const [activeChat, setActiveChat] = useState(null);
+            const [sessions, setSessions] = useState(() => JSON.parse(localStorage.getItem('QQ_LITE_SESSIONS')) || [{ id: '1', name: 'Gemini Assistant', avatar: '🤖', lastMessage: '你好！我是你的 AI 助手。' }]);
+            const [allMessages, setAllMessages] = useState(() => JSON.parse(localStorage.getItem('QQ_LITE_MSGS')) || { '1': [{ text: '你好！我是你的 AI 助手，你可以通过设置导出我的记忆。', isSelf: false }] });
+
+            useEffect(() => {
+                localStorage.setItem('QQ_LITE_SESSIONS', JSON.stringify(sessions));
+                localStorage.setItem('QQ_LITE_MSGS', JSON.stringify(allMessages));
+            }, [sessions, allMessages]);
+
+            const handleSend = (sid, msg) => {
+                const newMsgs = [...(allMessages[sid] || []), msg];
+                setAllMessages({...allMessages, [sid]: newMsgs});
+                setSessions(sessions.map(s => s.id === sid ? {...s, lastMessage: msg.text} : s));
+            };
+
+            return (
+                <>
+                    <div className="flex-1 flex flex-col overflow-hidden">
+                        <div className="p-4 flex justify-between items-center bg-white shrink-0">
+                            <h1 className="text-xl font-black">Lite OS</h1>
+                            <div className="flex space-x-4"><Search size={20}/><Plus size={20}/></div>
+                        </div>
+                        <div className="flex-1 overflow-y-auto">
+                            {sessions.map(s => (
+                                <div key={s.id} onClick={() => setActiveChat(s)} className="flex items-center p-4 active:bg-gray-100 border-b border-gray-50 cursor-pointer">
+                                    <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center text-xl mr-3">{s.avatar}</div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="font-bold text-gray-800">{s.name}</p>
+                                        <p className="text-xs text-gray-400 truncate">{s.lastMessage}</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                        <div className="h-16 border-t flex justify-around items-center bg-white shrink-0">
+                            <button onClick={()=>setView('list')} className="ios-tab text-blue-500"><MessageCircle /></button>
+                            <button className="ios-tab text-gray-300"><User /></button>
+                            <button onClick={()=>setView('settings')} className="ios-tab text-gray-300"><Settings /></button>
+                        </div>
+                    </div>
+
+                    {activeChat && <ChatDetail contact={activeChat} messages={allMessages[activeChat.id] || []} onBack={()=>setActiveChat(null)} onSendMessage={(m)=>handleSend(activeChat.id, m)} />}
+                    {view === 'settings' && <SettingsView sessions={sessions} allMessages={allMessages} onBack={()=>setView('list')} />}
+                </>
+            );
+        };
+
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>
